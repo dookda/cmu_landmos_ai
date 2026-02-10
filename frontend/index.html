@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description"
+        content="CMU LandMOS AI — Local AI-powered GNSS Point Displacement Chart Reader and Analyzer using Ollama">
+    <title>CMU LandMOS AI — GNSS Chart Reader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <!-- ─── Background Effects ──────────────────────────────────── -->
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <!-- ─── Header ──────────────────────────────────────────────── -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo-section">
+                <div class="logo-icon">
+                    <svg width="36" height="36" viewBox="0 0 36 36" fill="none">
+                        <circle cx="18" cy="18" r="16" stroke="url(#grad1)" stroke-width="2.5" />
+                        <circle cx="18" cy="18" r="4" fill="url(#grad1)" />
+                        <circle cx="18" cy="8" r="2.5" fill="#00d4ff" />
+                        <circle cx="26" cy="24" r="2.5" fill="#00ff88" />
+                        <circle cx="10" cy="24" r="2.5" fill="#ff6b6b" />
+                        <line x1="18" y1="18" x2="18" y2="8" stroke="#00d4ff" stroke-width="1" opacity="0.6" />
+                        <line x1="18" y1="18" x2="26" y2="24" stroke="#00ff88" stroke-width="1" opacity="0.6" />
+                        <line x1="18" y1="18" x2="10" y2="24" stroke="#ff6b6b" stroke-width="1" opacity="0.6" />
+                        <defs>
+                            <linearGradient id="grad1" x1="0" y1="0" x2="36" y2="36">
+                                <stop offset="0%" stop-color="#00d4ff" />
+                                <stop offset="100%" stop-color="#7c3aed" />
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="logo-text">CMU LandMOS <span class="logo-highlight">AI</span></h1>
+                    <p class="logo-sub">GNSS Chart Intelligence — Powered by Ollama</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="theme-toggle" id="themeToggle">
+                    <button class="theme-btn" id="themeBtnLight" onclick="setTheme('light')" title="Light mode">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="5"/>
+                            <line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/>
+                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                            <line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/>
+                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                        </svg>
+                    </button>
+                    <button class="theme-btn active" id="themeBtnDark" onclick="setTheme('dark')" title="Dark mode">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="lang-toggle" id="langToggle">
+                    <button class="lang-btn" id="langBtnEN" onclick="setLanguage('en')">EN</button>
+                    <button class="lang-btn active" id="langBtnTH" onclick="setLanguage('th')">TH</button>
+                </div>
+                <div class="header-status" id="statusBadge">
+                    <span class="status-dot"></span>
+                    <span class="status-text">Checking...</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- ─── Main Content ────────────────────────────────────────── -->
+    <main class="main">
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <h2 class="hero-title" data-en="Analyze GNSS Displacement Charts" data-th="วิเคราะห์กราฟการเคลื่อนตัว GNSS">
+                วิเคราะห์กราฟการเคลื่อนตัว GNSS
+            </h2>
+            <p class="hero-desc"
+                data-en="Upload GNSS point displacement charts and let local AI describe, interpret, and explain the data — all running privately on your machine."
+                data-th="อัปโหลดกราฟการเคลื่อนตัวของจุด GNSS แล้วให้ AI ท้องถิ่นอธิบาย วิเคราะห์ และแปลความหมายข้อมูล — ทั้งหมดทำงานบนเครื่องของคุณ">
+                อัปโหลดกราฟการเคลื่อนตัวของจุด GNSS แล้วให้ AI ท้องถิ่นอธิบาย วิเคราะห์ และแปลความหมายข้อมูล —
+                ทั้งหมดทำงานบนเครื่องของคุณ
+            </p>
+        </section>
+
+        <!-- Model Selector -->
+        <section class="model-selector-section" id="modelSelector">
+            <div class="model-selector-header">
+                <h3>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+                        <path d="M2 17l10 5 10-5" />
+                        <path d="M2 12l10 5 10-5" />
+                    </svg>
+                    <span data-en="Select AI Model" data-th="เลือกโมเดล AI">เลือกโมเดล AI</span>
+                </h3>
+            </div>
+            <div class="model-cards">
+                <div class="model-card active" id="modelCard_moondream" onclick="setModelMode('moondream')">
+                    <div class="model-card-icon">🌙</div>
+                    <div class="model-card-info">
+                        <h4>Moondream</h4>
+                        <p data-en="Lightweight vision model, low RAM (~2 GB)"
+                            data-th="โมเดลวิทัศน์ขนาดเล็ก ใช้ RAM น้อย (~2 GB)">โมเดลวิทัศน์ขนาดเล็ก ใช้ RAM น้อย (~2 GB)</p>
+                        <span class="model-tag">moondream + llama3.2:1b</span>
+                    </div>
+                    <div class="model-status-dot" id="modelStatus_moondream" title="Checking..."></div>
+                </div>
+                <div class="model-card" id="modelCard_llava" onclick="setModelMode('llava')">
+                    <div class="model-card-icon">🦙</div>
+                    <div class="model-card-info">
+                        <h4>LLaVA</h4>
+                        <p data-en="Better accuracy, requires more RAM (~8 GB)"
+                            data-th="แม่นยำกว่า ต้องใช้ RAM มากกว่า (~8 GB)">แม่นยำกว่า ต้องใช้ RAM มากกว่า (~8 GB)</p>
+                        <span class="model-tag">llava:7b + llama3.2:3b</span>
+                    </div>
+                    <div class="model-status-dot" id="modelStatus_llava" title="Checking..."></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Action Cards -->
+        <div class="action-grid">
+            <!-- Upload Chart Card -->
+            <div class="action-card" id="uploadCard">
+                <div class="card-icon upload-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                        <polyline points="17 8 12 3 7 8" />
+                        <line x1="12" y1="3" x2="12" y2="15" />
+                    </svg>
+                </div>
+                <h3 data-en="Upload Chart" data-th="อัปโหลดกราฟ">อัปโหลดกราฟ</h3>
+                <p data-en="Upload your GNSS displacement chart image for AI analysis"
+                    data-th="อัปโหลดกราฟการเคลื่อนตัว GNSS ของคุณเพื่อให้ AI วิเคราะห์">อัปโหลดกราฟการเคลื่อนตัว GNSS
+                    ของคุณเพื่อให้ AI วิเคราะห์</p>
+                <input type="file" id="fileInput" accept="image/*" hidden>
+                <button class="btn btn-primary" id="uploadBtn" onclick="document.getElementById('fileInput').click()">
+                    <span data-en="Choose File" data-th="เลือกไฟล์">เลือกไฟล์</span>
+                </button>
+                <div class="file-name" id="fileName"></div>
+            </div>
+
+            <!-- LandMOS Station Data Card -->
+            <div class="action-card" id="stationCard">
+                <div class="card-icon station-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                        stroke-width="1.5">
+                        <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                        <circle cx="12" cy="9" r="2.5"/>
+                    </svg>
+                </div>
+                <h3 data-en="LandMOS Station Data" data-th="ข้อมูลสถานี LandMOS">ข้อมูลสถานี LandMOS</h3>
+                <p data-en="Fetch GNSS time-series data from LandMOS API and let AI analyze it"
+                    data-th="ดึงข้อมูลอนุกรมเวลา GNSS จาก LandMOS API แล้วให้ AI วิเคราะห์">ดึงข้อมูลอนุกรมเวลา GNSS
+                    จาก LandMOS API แล้วให้ AI วิเคราะห์</p>
+                <div class="station-input-group">
+                    <input type="text" id="stationCode" class="input-field"
+                        data-placeholder-en="Station code (e.g. CMUP)"
+                        data-placeholder-th="รหัสสถานี (เช่น CMUP)"
+                        placeholder="รหัสสถานี (เช่น CMUP)">
+                </div>
+                <div class="station-date-row">
+                    <div class="station-date-field">
+                        <label data-en="Start Date" data-th="วันเริ่มต้น">วันเริ่มต้น</label>
+                        <input type="date" id="startDate" class="input-field">
+                    </div>
+                    <div class="station-date-field">
+                        <label data-en="End Date" data-th="วันสิ้นสุด">วันสิ้นสุด</label>
+                        <input type="date" id="endDate" class="input-field">
+                    </div>
+                </div>
+                <button class="btn btn-secondary" onclick="fetchAndAnalyzeStation()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                        <polyline points="22 2 22 8 16 8"/>
+                    </svg>
+                    <span data-en="Fetch & Analyze" data-th="ดึงข้อมูล & วิเคราะห์">ดึงข้อมูล & วิเคราะห์</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ─── Analysis Panel (hidden initially) ────────────────── -->
+        <div class="analysis-panel" id="analysisPanel" style="display:none;">
+            <!-- Chart Preview -->
+            <div class="chart-preview-section">
+                <div class="section-header">
+                    <h3>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <polyline points="21 15 16 10 5 21" />
+                        </svg>
+                        <span data-en="Chart Preview" data-th="ตัวอย่างกราฟ">ตัวอย่างกราฟ</span>
+                    </h3>
+                    <button class="btn btn-sm btn-accent" onclick="analyzeCurrentChart()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 6v6l4 2" />
+                        </svg>
+                        <span data-en="Analyze with AI" data-th="วิเคราะห์ด้วย AI">วิเคราะห์ด้วย AI</span>
+                    </button>
+                </div>
+                <div class="chart-image-wrapper">
+                    <img id="chartImage" src="" alt="GNSS Displacement Chart">
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div class="loading-panel" id="loadingPanel" style="display:none;">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <h3 class="loading-text" data-en="AI is analyzing your chart..."
+                    data-th="AI กำลังวิเคราะห์กราฟของคุณ...">AI กำลังวิเคราะห์กราฟของคุณ...</h3>
+                <p class="loading-sub" data-en="Using LLaVA vision model to read and interpret the displacement data"
+                    data-th="ใช้โมเดล LLaVA ในการอ่านและแปลความหมายข้อมูลการเคลื่อนตัว">ใช้โมเดล LLaVA
+                    ในการอ่านและแปลความหมายข้อมูลการเคลื่อนตัว</p>
+                <div class="loading-steps" id="loadingSteps">
+                    <div class="step active" id="step1">
+                        <span class="step-icon">🔍</span> <span data-en="Reading chart image..."
+                            data-th="กำลังอ่านกราฟ...">กำลังอ่านกราฟ...</span>
+                    </div>
+                    <div class="step" id="step2">
+                        <span class="step-icon">📊</span> <span data-en="Analyzing displacement patterns..."
+                            data-th="กำลังวิเคราะห์รูปแบบการเคลื่อนตัว...">กำลังวิเคราะห์รูปแบบการเคลื่อนตัว...</span>
+                    </div>
+                    <div class="step" id="step3">
+                        <span class="step-icon">📝</span> <span data-en="Generating description..."
+                            data-th="กำลังสร้างคำอธิบาย...">กำลังสร้างคำอธิบาย...</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Analysis Results -->
+            <div class="results-panel" id="resultsPanel" style="display:none;">
+                <!-- Summary Card -->
+                <div class="result-card summary-card">
+                    <div class="result-header">
+                        <div class="result-icon summary-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                                <polyline points="10 9 9 9 8 9" />
+                            </svg>
+                        </div>
+                        <h3 data-en="Summary" data-th="สรุป">สรุป</h3>
+                        <span class="result-badge" data-en="Easy to understand" data-th="เข้าใจง่าย">เข้าใจง่าย</span>
+                    </div>
+                    <div class="result-content" id="summaryContent"></div>
+                </div>
+
+                <!-- Detailed Analysis Card -->
+                <div class="result-card detail-card">
+                    <div class="result-header" onclick="toggleDetail()">
+                        <div class="result-icon detail-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="16" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                            </svg>
+                        </div>
+                        <h3 data-en="Detailed AI Analysis" data-th="การวิเคราะห์ AI เชิงลึก">การวิเคราะห์ AI เชิงลึก
+                        </h3>
+                        <span class="result-badge tech-badge" data-en="Technical" data-th="เชิงเทคนิค">เชิงเทคนิค</span>
+                        <svg class="toggle-arrow" id="toggleArrow" width="20" height="20" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </div>
+                    <div class="result-content detail-content" id="detailContent"></div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- ─── Station Data Analysis Panel (hidden initially) ────── -->
+        <div class="analysis-panel" id="stationPanel" style="display:none;">
+            <!-- Station Info Header -->
+            <div class="chart-preview-section">
+                <div class="section-header">
+                    <h3>
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2">
+                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/>
+                            <circle cx="12" cy="9" r="2.5"/>
+                        </svg>
+                        <span data-en="Station Data" data-th="ข้อมูลสถานี">ข้อมูลสถานี</span>
+                        <span class="station-code-badge" id="stationCodeBadge"></span>
+                    </h3>
+                </div>
+                <div class="station-data-preview" id="stationDataPreview">
+                    <p class="station-data-info" id="stationDataInfo"></p>
+                    <div class="station-data-table-wrapper">
+                        <table class="station-data-table" id="stationDataTable">
+                            <thead id="stationTableHead"></thead>
+                            <tbody id="stationTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Station Loading State -->
+            <div class="loading-panel" id="stationLoadingPanel" style="display:none;">
+                <div class="loader">
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                    <div class="loader-ring"></div>
+                </div>
+                <h3 class="loading-text" data-en="AI is analyzing station data..."
+                    data-th="AI กำลังวิเคราะห์ข้อมูลสถานี...">AI กำลังวิเคราะห์ข้อมูลสถานี...</h3>
+                <p class="loading-sub" data-en="Processing GNSS time-series data with AI model"
+                    data-th="กำลังประมวลผลข้อมูลอนุกรมเวลา GNSS ด้วยโมเดล AI">กำลังประมวลผลข้อมูลอนุกรมเวลา GNSS
+                    ด้วยโมเดล AI</p>
+            </div>
+
+            <!-- Station Analysis Results -->
+            <div class="results-panel" id="stationResultsPanel" style="display:none;">
+                <div class="result-card summary-card">
+                    <div class="result-header">
+                        <div class="result-icon summary-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                                <polyline points="14 2 14 8 20 8" />
+                                <line x1="16" y1="13" x2="8" y2="13" />
+                                <line x1="16" y1="17" x2="8" y2="17" />
+                            </svg>
+                        </div>
+                        <h3 data-en="Summary" data-th="สรุป">สรุป</h3>
+                        <span class="result-badge" data-en="Easy to understand" data-th="เข้าใจง่าย">เข้าใจง่าย</span>
+                    </div>
+                    <div class="result-content" id="stationSummaryContent"></div>
+                </div>
+
+                <div class="result-card detail-card">
+                    <div class="result-header" onclick="toggleStationDetail()">
+                        <div class="result-icon detail-icon">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="12" y1="16" x2="12" y2="12" />
+                                <line x1="12" y1="8" x2="12.01" y2="8" />
+                            </svg>
+                        </div>
+                        <h3 data-en="Detailed AI Analysis" data-th="การวิเคราะห์ AI เชิงลึก">การวิเคราะห์ AI เชิงลึก</h3>
+                        <span class="result-badge tech-badge" data-en="Technical" data-th="เชิงเทคนิค">เชิงเทคนิค</span>
+                        <svg class="toggle-arrow" id="stationToggleArrow" width="20" height="20" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                    </div>
+                    <div class="result-content detail-content" id="stationDetailContent"></div>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- ─── Footer ──────────────────────────────────────────────── -->
+    <footer class="footer">
+        <p data-en="CMU LandMOS AI &bull; Powered by Ollama &bull; All processing runs locally on your machine"
+            data-th="CMU LandMOS AI &bull; ขับเคลื่อนด้วย Ollama &bull; ประมวลผลทั้งหมดบนเครื่องของคุณ">
+            CMU LandMOS AI &bull; ขับเคลื่อนด้วย <strong>Ollama</strong> &bull;
+            ประมวลผลทั้งหมดบนเครื่องของคุณ</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
