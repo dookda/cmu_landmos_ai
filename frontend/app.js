@@ -9,6 +9,9 @@ let currentFile = null;
 let currentLang = localStorage.getItem('lang') || 'th';
 let currentModelMode = localStorage.getItem('modelMode') || 'moondream';
 let currentTheme = localStorage.getItem('theme') || 'dark';
+let echartInstance = null;
+let cachedStationRecords = null;
+let cachedStatCode = null;
 
 // ── DOM Elements ─────────────────────────────────────────────────────
 const fileInput = document.getElementById('fileInput');
@@ -66,6 +69,11 @@ function setTheme(theme) {
 
     document.getElementById('themeBtnLight').classList.toggle('active', theme === 'light');
     document.getElementById('themeBtnDark').classList.toggle('active', theme === 'dark');
+
+    // Re-render ECharts with new theme colours if chart exists
+    if (echartInstance && cachedStationRecords) {
+        renderDisplacementChart(cachedStationRecords, cachedStatCode);
+    }
 }
 
 // ── Model Mode Switching ────────────────────────────────────────────
@@ -338,11 +346,13 @@ async function fetchAndAnalyzeStation() {
     const stationPanel = document.getElementById('stationPanel');
     const stationLoadingPanel = document.getElementById('stationLoadingPanel');
     const stationResultsPanel = document.getElementById('stationResultsPanel');
+    const echartSection = document.getElementById('echartSection');
 
     // Show station panel and loading
     stationPanel.style.display = 'block';
     stationLoadingPanel.style.display = 'block';
     stationResultsPanel.style.display = 'none';
+    echartSection.style.display = 'none';
 
     // Update station code badge
     document.getElementById('stationCodeBadge').textContent = statCode.toUpperCase();
@@ -352,7 +362,8 @@ async function fetchAndAnalyzeStation() {
 
     stationPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
 
-    // Step 1: Fetch raw data to show preview
+    // Step 1: Fetch raw data to show preview + render chart
+    let stationData = null;
     try {
         let dataUrl = `/api/station/data?stat_code=${encodeURIComponent(statCode)}`;
         if (startDate) dataUrl += `&start_date=${encodeURIComponent(startDate)}`;
@@ -363,14 +374,30 @@ async function fetchAndAnalyzeStation() {
             const err = await dataResp.json().catch(() => ({}));
             throw new Error(err.detail || `Failed to fetch station data (${dataResp.status})`);
         }
-        const stationData = await dataResp.json();
+        stationData = await dataResp.json();
         displayStationDataPreview(stationData, statCode);
+
+        // Sort and cache data, then render ECharts displacement chart
+        const records = Array.isArray(stationData) ? stationData : (stationData.records || stationData.data || []);
+        // Sort by timestamp ascending
+        records.sort((a, b) => {
+            const ta = a.timestamp || a.date || '';
+            const tb = b.timestamp || b.date || '';
+            return ta.localeCompare(tb);
+        });
+        cachedStationRecords = records;
+        cachedStatCode = statCode;
+
+        if (records.length > 0) {
+            echartSection.style.display = 'block';
+            renderDisplacementChart(records, statCode);
+        }
     } catch (err) {
         document.getElementById('stationDataInfo').textContent =
             currentLang === 'th' ? 'ไม่สามารถโหลดข้อมูลตัวอย่างได้' : 'Could not load data preview';
     }
 
-    // Step 2: Send to AI for analysis
+    // Step 2: Send to AI for analysis (text-only, quick)
     try {
         const formData = new FormData();
         formData.append('stat_code', statCode);
@@ -405,6 +432,209 @@ async function fetchAndAnalyzeStation() {
 
         stationResultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
         showToast(currentLang === 'th' ? 'วิเคราะห์ข้อมูลสถานีเสร็จสมบูรณ์!' : 'Station data analysis complete!', 'success');
+    } catch (err) {
+        showToast((currentLang === 'th' ? 'ข้อผิดพลาด: ' : 'Error: ') + err.message, 'error');
+        stationLoadingPanel.style.display = 'none';
+    }
+}
+
+// ── ECharts Displacement Chart ──────────────────────────────────────
+function renderDisplacementChart(records, statCode) {
+    const chartDom = document.getElementById('displacementChart');
+    if (!chartDom) return;
+
+    // Dispose previous instance if exists
+    if (echartInstance) {
+        echartInstance.dispose();
+    }
+    echartInstance = echarts.init(chartDom, currentTheme === 'dark' ? 'dark' : null);
+
+    // Extract data
+    const timestamps = records.map(r => {
+        const ts = r.timestamp || r.date || '';
+        // Show only date part if full ISO timestamp
+        return ts.length > 10 ? ts.substring(0, 10) : ts;
+    });
+    const deData = records.map(r => parseFloat(r.de) || null);
+    const dnData = records.map(r => parseFloat(r.dn) || null);
+    const dhData = records.map(r => parseFloat(r.dh) || null);
+
+    const isDark = currentTheme === 'dark';
+
+    const option = {
+        backgroundColor: 'transparent',
+        title: {
+            text: currentLang === 'th'
+                ? `การเคลื่อนตัวของสถานี ${statCode.toUpperCase()}`
+                : `Displacement — Station ${statCode.toUpperCase()}`,
+            left: 'center',
+            textStyle: {
+                color: isDark ? '#eef0ff' : '#1a1a2e',
+                fontSize: 15,
+                fontFamily: 'Inter, sans-serif',
+                fontWeight: 700,
+            },
+        },
+        tooltip: {
+            trigger: 'axis',
+            backgroundColor: isDark ? 'rgba(22,22,56,0.95)' : 'rgba(255,255,255,0.97)',
+            borderColor: isDark ? 'rgba(124,58,237,0.3)' : 'rgba(109,40,217,0.15)',
+            textStyle: { color: isDark ? '#eef0ff' : '#1a1a2e', fontSize: 12 },
+            axisPointer: { type: 'cross', lineStyle: { color: '#7c3aed', opacity: 0.4 } },
+        },
+        legend: {
+            bottom: 0,
+            textStyle: { color: isDark ? '#9ba3c7' : '#4a4a6a', fontSize: 12 },
+            data: [
+                { name: 'East (de)', icon: 'roundRect' },
+                { name: 'North (dn)', icon: 'roundRect' },
+                { name: 'Height (dh)', icon: 'roundRect' },
+            ],
+        },
+        grid: { left: 60, right: 24, top: 50, bottom: 50, containLabel: false },
+        xAxis: {
+            type: 'category',
+            data: timestamps,
+            axisLabel: {
+                color: isDark ? '#6b73a0' : '#8888a8',
+                fontSize: 10,
+                rotate: timestamps.length > 30 ? 45 : 0,
+                formatter: (val) => val.substring(5), // show MM-DD
+            },
+            axisLine: { lineStyle: { color: isDark ? '#2a2a4e' : '#d0d0e0' } },
+            splitLine: { show: false },
+        },
+        yAxis: {
+            type: 'value',
+            name: currentLang === 'th' ? 'การเคลื่อนตัว (m)' : 'Displacement (m)',
+            nameTextStyle: { color: isDark ? '#6b73a0' : '#8888a8', fontSize: 11 },
+            axisLabel: { color: isDark ? '#6b73a0' : '#8888a8', fontSize: 10 },
+            axisLine: { lineStyle: { color: isDark ? '#2a2a4e' : '#d0d0e0' } },
+            splitLine: { lineStyle: { color: isDark ? 'rgba(124,58,237,0.08)' : 'rgba(109,40,217,0.06)' } },
+        },
+        dataZoom: [
+            { type: 'inside', start: 0, end: 100 },
+            {
+                type: 'slider', start: 0, end: 100, height: 20, bottom: 30,
+                borderColor: isDark ? '#2a2a4e' : '#d0d0e0',
+                fillerColor: isDark ? 'rgba(0,212,255,0.15)' : 'rgba(0,153,204,0.12)',
+                handleStyle: { color: '#7c3aed' },
+                textStyle: { color: isDark ? '#6b73a0' : '#8888a8', fontSize: 10 },
+            },
+        ],
+        series: [
+            {
+                name: 'East (de)',
+                type: 'line',
+                data: deData,
+                symbol: 'circle',
+                symbolSize: 3,
+                lineStyle: { width: 1.8, color: '#00d4ff' },
+                itemStyle: { color: '#00d4ff' },
+                smooth: false,
+                emphasis: { focus: 'series' },
+            },
+            {
+                name: 'North (dn)',
+                type: 'line',
+                data: dnData,
+                symbol: 'circle',
+                symbolSize: 3,
+                lineStyle: { width: 1.8, color: '#00ff88' },
+                itemStyle: { color: '#00ff88' },
+                smooth: false,
+                emphasis: { focus: 'series' },
+            },
+            {
+                name: 'Height (dh)',
+                type: 'line',
+                data: dhData,
+                symbol: 'circle',
+                symbolSize: 3,
+                lineStyle: { width: 1.8, color: '#ff6b6b' },
+                itemStyle: { color: '#ff6b6b' },
+                smooth: false,
+                emphasis: { focus: 'series' },
+            },
+        ],
+    };
+
+    echartInstance.setOption(option);
+
+    // Auto-resize on window resize
+    window.addEventListener('resize', () => {
+        if (echartInstance) echartInstance.resize();
+    });
+}
+
+// ── Analyze Station with Chart Image (Vision + Text) ────────────────
+async function analyzeStationWithChart() {
+    if (!echartInstance) {
+        showToast(currentLang === 'th' ? 'ไม่มีกราฟให้วิเคราะห์' : 'No chart to analyze', 'error');
+        return;
+    }
+
+    const stationLoadingPanel = document.getElementById('stationLoadingPanel');
+    const stationResultsPanel = document.getElementById('stationResultsPanel');
+
+    stationLoadingPanel.style.display = 'block';
+    stationResultsPanel.style.display = 'none';
+    stationLoadingPanel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    try {
+        // Capture ECharts as base64 PNG (dataURL)
+        // Optimization: Reduced pixelRatio from 2 to 1.5 for faster upload/processing
+        const chartDataUrl = echartInstance.getDataURL({
+            type: 'png',
+            pixelRatio: 1.5,
+            backgroundColor: currentTheme === 'dark' ? '#0d0d20' : '#ffffff',
+        });
+
+        // Convert data URL to Blob for FormData
+        const chartBlob = await (await fetch(chartDataUrl)).blob();
+
+        const statCode = cachedStatCode || document.getElementById('stationCode').value.trim();
+        const startDate = document.getElementById('startDate').value;
+        const endDate = document.getElementById('endDate').value;
+
+        const formData = new FormData();
+        formData.append('stat_code', statCode);
+        formData.append('language', currentLang);
+        formData.append('model_mode', currentModelMode);
+        formData.append('chart_image', chartBlob, 'displacement_chart.png');
+        if (startDate) formData.append('start_date', startDate);
+        if (endDate) formData.append('end_date', endDate);
+
+        const resp = await fetch('/api/station/analyze', {
+            method: 'POST',
+            body: formData,
+        });
+
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            const detail = err.detail || '';
+            if (resp.status === 503) {
+                const prefix = currentLang === 'th' ? 'โมเดล AI ไม่พร้อม: ' : 'AI model not ready: ';
+                throw new Error(prefix + (detail || 'Please check that Ollama is running.'));
+            }
+            throw new Error(detail || 'Analysis failed');
+        }
+
+        const data = await resp.json();
+
+        stationLoadingPanel.style.display = 'none';
+        stationResultsPanel.style.display = 'block';
+
+        document.getElementById('stationSummaryContent').textContent = data.summary || 'No summary available.';
+        document.getElementById('stationDetailContent').textContent = data.description || 'No detailed analysis available.';
+
+        stationResultsPanel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        showToast(
+            currentLang === 'th'
+                ? 'วิเคราะห์กราฟ + ข้อมูลสถานีเสร็จสมบูรณ์!'
+                : 'Chart + station data analysis complete!',
+            'success'
+        );
     } catch (err) {
         showToast((currentLang === 'th' ? 'ข้อผิดพลาด: ' : 'Error: ') + err.message, 'error');
         stationLoadingPanel.style.display = 'none';

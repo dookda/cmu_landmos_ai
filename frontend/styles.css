@@ -1059,6 +1059,95 @@ body {
     background: rgba(0, 212, 255, 0.04);
 }
 
+[data-theme="light"] .station-data-table tbody tr:hover {
+    background: rgba(0, 153, 204, 0.04);
+}
+
+/* ── ECharts Chart Section ───────────────────────────────────────── */
+.echart-section {
+    background: var(--gradient-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    margin-bottom: 24px;
+    animation: fadeInUp 0.5s ease-out;
+    transition: var(--transition);
+}
+
+.echart-section:hover {
+    border-color: var(--border-glow);
+    box-shadow: var(--shadow-glow);
+}
+
+.echart-container {
+    background: var(--bg-card);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    padding: 12px 8px 4px;
+    position: relative;
+}
+
+.echart-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: var(--gradient-primary);
+    border-radius: var(--radius-md) var(--radius-md) 0 0;
+    opacity: 0.6;
+}
+
+[data-theme="light"] .echart-section {
+    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.04);
+}
+
+[data-theme="light"] .echart-container {
+    background: #fafafe;
+    border-color: rgba(0, 0, 0, 0.06);
+}
+
+/* ── AI Disclaimer ───────────────────────────────────────────────── */
+.ai-disclaimer {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 16px;
+    padding: 14px 18px;
+    border-radius: var(--radius-sm);
+    background: rgba(255, 215, 0, 0.06);
+    border: 1px solid rgba(255, 215, 0, 0.15);
+    color: var(--accent-gold);
+    font-size: 0.8rem;
+    line-height: 1.55;
+}
+
+.ai-disclaimer svg {
+    flex-shrink: 0;
+    margin-top: 1px;
+    color: var(--accent-gold);
+    opacity: 0.85;
+}
+
+.ai-disclaimer p {
+    margin: 0;
+    color: var(--text-muted);
+}
+
+[data-theme="light"] .ai-disclaimer {
+    background: rgba(212, 168, 0, 0.06);
+    border-color: rgba(212, 168, 0, 0.18);
+}
+
+.global-disclaimer {
+    max-width: 800px;
+    margin: 24px auto 0;
+    text-align: left;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.04);
+}
+
 /* ── Footer ───────────────────────────────────────────────────────── */
 .footer {
     text-align: center;

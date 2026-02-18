@@ -522,7 +522,16 @@ async def get_station_data(
                 params=params,
             )
             if resp.status_code == 200:
-                return resp.json()
+                data = resp.json()
+                # Sort records by timestamp ascending
+                if isinstance(data, list):
+                    data.sort(key=lambda r: r.get("timestamp", ""))
+                elif isinstance(data, dict):
+                    for key in ("records", "data"):
+                        if key in data and isinstance(data[key], list):
+                            data[key].sort(key=lambda r: r.get("timestamp", ""))
+                            break
+                return data
             else:
                 detail = resp.text[:300] if resp.text else f"status {resp.status_code}"
                 raise HTTPException(resp.status_code, detail=f"LandMOS API error: {detail}")
@@ -544,10 +553,17 @@ async def analyze_station_data(
     end_date: str = Form(default=""),
     language: str = Form(default="en"),
     model_mode: str = Form(default="moondream"),
+    chart_image: UploadFile = File(default=None),
 ):
-    """Fetch GNSS station data from LandMOS API and analyze it with AI."""
+    """Fetch GNSS station data from LandMOS API and analyze it with AI.
+
+    When a chart_image is provided (from ECharts frontend), the analysis
+    combines vision model output (chart reading) with text model output
+    (data analysis) for a richer, more accurate result.
+    """
     # Resolve model mode
     mode = MODEL_MODES.get(model_mode, MODEL_MODES[DEFAULT_MODEL_MODE])
+    active_vision_model = mode["vision_model"]
     active_text_model = mode["text_model"]
 
     # Ensure text model is available
@@ -557,6 +573,16 @@ async def analyze_station_data(
             detail=f"Text model '{active_text_model}' is not available. "
                    "Please check that Ollama is running.",
         )
+
+    # If chart image provided, also ensure vision model is available
+    has_chart_image = chart_image is not None and chart_image.filename
+    if has_chart_image:
+        if not await ensure_model_pulled(active_vision_model):
+            logger.warning(
+                f"Vision model '{active_vision_model}' not available, "
+                "falling back to text-only analysis"
+            )
+            has_chart_image = False
 
     # Fetch station data from LandMOS API
     params = {"stat_code": stat_code}
@@ -575,6 +601,14 @@ async def analyze_station_data(
                 detail = resp.text[:300] if resp.text else f"status {resp.status_code}"
                 raise HTTPException(502, detail=f"LandMOS API error: {detail}")
             station_data = resp.json()
+            # Sort records by timestamp ascending
+            if isinstance(station_data, list):
+                station_data.sort(key=lambda r: r.get("timestamp", ""))
+            elif isinstance(station_data, dict):
+                for key in ("records", "data"):
+                    if key in station_data and isinstance(station_data[key], list):
+                        station_data[key].sort(key=lambda r: r.get("timestamp", ""))
+                        break
     except httpx.ConnectError:
         raise HTTPException(502, detail="Cannot connect to LandMOS API server.")
     except httpx.TimeoutException:
@@ -596,8 +630,130 @@ Technical terms like GNSS, ITRF, mm/year can remain in English, but all sentence
     else:
         lang_instruction = "Please respond in English."
 
-    # ── Step 1: Detailed analysis ──────────────────────────────────
-    analysis_prompt = f"""You are an expert geodetic engineer analyzing GNSS monitoring data from station {stat_code}.
+    # ── Optional Step: Vision analysis of chart image ──────────────
+    chart_vision_description = ""
+    if has_chart_image:
+        try:
+            chart_content = await chart_image.read()
+            chart_base64 = base64.b64encode(chart_content).decode("utf-8")
+
+            # Save chart image for reference (Optimized: Commented out for speed)
+            # chart_filename = f"station_{stat_code}_{str(uuid.uuid4())[:6]}.png"
+            # chart_path = UPLOAD_DIR / chart_filename
+            # with open(chart_path, "wb") as f:
+            #     f.write(chart_content)
+
+            vision_prompt = f"""You are an expert geodetic engineer analyzing a GNSS displacement chart
+for station {stat_code}.
+
+{lang_instruction}
+
+This chart shows East (de), North (dn), and Height (dh) displacement over time.
+The blue line represents East displacement, the green line represents North displacement,
+and the red line represents Height displacement. All values are in meters.
+
+Please analyze the chart and describe:
+1. The overall trend for each displacement component (increasing, decreasing, stable).
+2. The approximate range of values for each component.
+3. Any visible seasonal patterns, periodic variations, or anomalies.
+4. Any sudden jumps or discontinuities in the data.
+5. What the displacement patterns suggest about ground movement at this station."""
+
+            chart_vision_description = await query_ollama_vision(
+                chart_base64, vision_prompt, model=active_vision_model
+            )
+            if chart_vision_description.startswith("Error:"):
+                logger.warning(f"Vision analysis failed: {chart_vision_description}")
+                chart_vision_description = ""
+            else:
+                logger.info(f"Vision analysis completed for station {stat_code} chart")
+        except Exception as e:
+            logger.error(f"Error processing chart image: {e}")
+            chart_vision_description = ""
+
+    # ── Step 1: Combined analysis (vision + text data) ─────────────
+    analysis_mode = "text-only"
+    
+    if chart_vision_description:
+        # Check if data summary is too large (approx token limit check)
+        # 1 token ~= 4 chars. 6000 chars ~= 1500 tokens for data alone.
+        MAX_DATA_CHARS = 6000
+        
+        if len(data_summary) > MAX_DATA_CHARS:
+            # Fallback: Use chart vision + minimal metadata only
+            analysis_mode = "chart-only (data too large)"
+            logger.info(f"Data summary too large ({len(data_summary)} chars). Switching to chart-only analysis.")
+            
+            analysis_prompt = f"""You are an expert geodetic engineer analyzing GNSS monitoring data from station {stat_code}.
+You are relying on an AI vision analysis of the displacement chart, as the raw data is too large to process directly.
+
+=== AI Vision Analysis of the Displacement Chart ===
+{chart_vision_description}
+
+=== YOUR TASK ===
+{lang_instruction}
+
+Based on the chart analysis above, provide TWO outputs separated by '===SUMMARY===':
+
+PART 1: Technical Analysis
+Provide a comprehensive assessment:
+1. What is the displacement trend for East (de), North (dn), and Height (dh)?
+2. Is there likely land subsidence or uplift based on the visual trends?
+3. Are there any visible anomalies, jumps, or seasonal patterns described?
+4. Provide an overall assessment of ground stability at this station.
+Note: Do not refer to specific numerical values unless they are mentioned in the chart analysis.
+
+===SUMMARY===
+PART 2: Non-Technical Summary
+Write a 3-5 sentence summary for a general audience that:
+- Explains what was measured.
+- Highlights key findings (direction/amount of movement).
+- Explains potential implications.
+Keep it simple and informative."""
+        
+        else:
+            # Standard combined mode: Vision + Text Data
+            analysis_mode = "vision+text"
+            analysis_prompt = f"""You are an expert geodetic engineer analyzing GNSS monitoring data from station {stat_code}.
+You have TWO sources of information:
+
+=== SOURCE 1: AI Vision Analysis of the Displacement Chart ===
+{chart_vision_description}
+
+=== SOURCE 2: Raw Numerical Data Summary ===
+Field definitions:
+- de, dn, dh = displacement from initial coordinate in East, North, and Height (meters)
+- sde, sdn, sdh = standard deviation of each displacement component (meters)
+- pdop = Position Dilution of Precision (lower is better)
+- no_satellite = number of satellites used
+
+{data_summary}
+
+=== YOUR TASK ===
+{lang_instruction}
+
+Combine insights from BOTH the chart visualization AND the numerical data to provide TWO outputs separated by '===SUMMARY===':
+
+PART 1: Technical Analysis
+1. What is the displacement trend for East (de), North (dn), and Height (dh)? Reference both visual patterns and statistics.
+2. Is there land subsidence (negative dh trend) or uplift? Quantify if possible.
+3. What is the approximate displacement rate per year for each component?
+4. Are there any anomalies, sudden jumps, or seasonal patterns visible in the chart?
+5. Comment on data quality based on S.D. values, PDOP, and visual data scatter.
+6. Provide an overall assessment of ground stability at this station.
+
+===SUMMARY===
+PART 2: Non-Technical Summary
+Write a 3-5 sentence summary for a general audience that:
+- Explains what was measured.
+- Highlights key findings (direction/amount of movement).
+- Explains potential implications.
+Keep it simple and informative."""
+
+    else:
+        # Text-only prompt (no chart image)
+        analysis_mode = "text-only"
+        analysis_prompt = f"""You are an expert geodetic engineer analyzing GNSS monitoring data from station {stat_code}.
 
 Field definitions:
 - de, dn, dh = displacement from initial coordinate in East, North, and Height (meters)
@@ -609,42 +765,37 @@ Field definitions:
 
 {data_summary}
 
-Analyze this data:
+Analyze this data and provide TWO outputs separated by '===SUMMARY===':
+
+PART 1: Technical Analysis
 1. What is the displacement trend for East (de), North (dn), and Height (dh)?
 2. Is there land subsidence (negative dh trend) or uplift?
 3. What is the approximate displacement rate per year for each component?
 4. Are there any anomalies or sudden jumps?
-5. Comment on data quality based on S.D. values and PDOP."""
+5. Comment on data quality based on S.D. values and PDOP.
 
-    description = await query_ollama_text(analysis_prompt, model=active_text_model, num_ctx=4096)
-
-    if description.startswith("Error:"):
-        raise HTTPException(503, detail=description)
-
-    # ── Step 2: User-friendly summary ──────────────────────────────
-    if language == "th":
-        summary_lang = """IMPORTANT: Write entirely in Thai (ภาษาไทย). Use simple Thai."""
-    else:
-        summary_lang = "Please write in English."
-
-    summary_prompt = f"""Based on the following technical analysis of GNSS station data (station: {stat_code}),
-create a concise, easy-to-understand summary for a non-technical user.
-
-{summary_lang}
-
-Technical Analysis:
-{description}
-
-Write a 3-5 sentence summary that:
-- Explains what was measured (ground/point movement at this station)
-- Highlights the key findings (direction and amount of movement)
-- Explains any potential implications
+===SUMMARY===
+PART 2: Non-Technical Summary
+Write a 3-5 sentence summary for a general audience that:
+- Explains what was measured.
+- Highlights key findings (direction/amount of movement).
+- Explains potential implications.
 Keep it simple and informative."""
 
-    summary = await query_ollama_text(summary_prompt, model=active_text_model, num_ctx=4096)
+    # Single call for both Analysis and Summary (Optimized)
+    full_response = await query_ollama_text(analysis_prompt, model=active_text_model, num_ctx=4096)
 
-    if summary.startswith("Error:"):
-        summary = description[:300] + "..." if len(description) > 300 else description
+    if full_response.startswith("Error:"):
+        raise HTTPException(503, detail=full_response)
+
+    # Split response into description and summary
+    parts = full_response.split("===SUMMARY===")
+    description = parts[0].strip()
+    summary = parts[1].strip() if len(parts) > 1 else "Summary not generated."
+    
+    # Clean up "PART 1: Technical Analysis" prefix if present
+    description = description.replace("PART 1: Technical Analysis", "").strip()
+    summary = summary.replace("PART 2: Non-Technical Summary", "").strip()
 
     chart_id = str(uuid.uuid4())[:8]
 
@@ -654,8 +805,10 @@ Keep it simple and informative."""
         description=description,
         summary=summary,
         details={
+            "vision_model": active_vision_model if has_chart_image else None,
             "text_model": active_text_model,
             "model_mode": model_mode,
+            "analysis_mode": analysis_mode,
             "language": language,
             "start_date": start_date,
             "end_date": end_date,
